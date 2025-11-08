@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <title>Timber Cut Optimizer – Pro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #f8f9fa; }
+
+    .unit-card {
+      border-radius: 12px;
+      margin-bottom: 1rem;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .unit-header {
+      cursor: move;
+    }
+
+    .drag-handle {
+      cursor: grab;
+    }
+
+    .cut-bar {
+      display: flex;
+      height: 24px;
+      border-radius: 999px;
+      overflow: hidden;
+      background-color: #e9ecef;
+      margin-top: 4px;
+      margin-bottom: 8px;
+      font-size: 0.7rem;
+    }
+
+    .cut-segment {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-right: 1px solid rgba(0,0,0,0.05);
+      white-space: nowrap;
+      padding: 0 2px;
+    }
+
+    .waste-segment {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-style: italic;
+      background-image: repeating-linear-gradient(
+        45deg,
+        rgba(0,0,0,0.06),
+        rgba(0,0,0,0.06) 4px,
+        transparent 4px,
+        transparent 8px
+      );
+    }
+
+    @media print {
+      .no-print {
+        display: none !important;
+      }
+      body {
+        background-color: #ffffff;
+      }
+      .card {
+        box-shadow: none !important;
+        border: 1px solid #ccc;
+      }
+      footer {
+        margin-top: 20px;
+        border-top: 1px solid #ccc;
+      }
+    }
+  </style>
+</head>
+<body class="p-3">
+
+<!-- Top Ad Banner -->
+<div id="adTop" class="no-print mb-3 text-center border rounded py-2 bg-light"
+     ad-link="https://example.com/ad_top"
+     ad-id="ad_top">
+</div>
+
+  <div class="container">
+
+    <!-- Header / Navbar -->
+    <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+      <h1 class="h3 mb-0">🪚 Timber Cut Optimizer – Pro</h1>
+      <button id="themeToggle" class="btn btn-sm btn-outline-secondary">
+        🌙 Dark
+      </button>
+    </div>
+
+    <!-- Project & Global Settings -->
+    <div class="card p-4 mb-4 no-print">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Company Name</label>
+          <input id="companyName" type="text" class="form-control" placeholder="e.g. Metallicode Carpentry">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Client Name</label>
+          <input id="clientName" type="text" class="form-control" placeholder="e.g. John Smith">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Project Name</label>
+          <input id="projectName" type="text" class="form-control" placeholder="e.g. Kitchen Renovation">
+        </div>
+      </div>
+
+      <div class="row g-3 mt-2">
+        <div class="col-md-4">
+          <label class="form-label">Logo URL (optional)</label>
+          <input id="logoUrl" type="text" class="form-control" placeholder="https://example.com/logo.png">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Extra % (waste / margin)</label>
+          <input id="extraPercent" type="number" step="1" class="form-control" placeholder="e.g. 10">
+        </div>
+        <div class="col-md-4 d-flex align-items-end">
+          <button id="addUnitBtn" class="btn btn-primary w-100">+ Add Unit</button>
+        </div>
+      </div>
+
+      <div class="row g-3 mt-3">
+        <div class="col-12">
+          <label class="form-label">Notes / Delivery Instructions</label>
+          <textarea id="notes" rows="2" class="form-control" placeholder="e.g. Deliver to site on Monday, morning slot preferred."></textarea>
+        </div>
+      </div>
+
+      <div class="row g-3 mt-3">
+        <div class="col-md-6 d-grid">
+          <button id="calculateBtn" class="btn btn-success">Calculate Timber Requirements</button>
+        </div>
+        <div class="col-md-6 d-grid">
+          <button id="printSummary" class="btn btn-outline-secondary">🖨️ Print / Download Purchase Order</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Units Container -->
+    <div id="unitsContainer" class="no-print"></div>
+
+    <!-- Results / Purchase Order -->
+    <div id="results" class="mt-4"></div>
+
+<!-- Bottom Ad Banner -->
+<div id="adBottom" class="no-print mt-4 text-center border rounded py-2 bg-light"
+     ad-link="https://example.com/ad_bottom"
+     ad-id="ad_bottom">
+</div>
+
+    <!-- Footer -->
+    <footer class="text-center py-3 mt-4 small text-muted">
+      © <span id="yearSpan"></span> – website made by <strong>Metallicode LTD</strong>
+    </footer>
+  </div>
+
+  <!-- Bootstrap JS + SortableJS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+
+  <script>
+    const unitsContainer = document.getElementById('unitsContainer');
+    const resultsDiv = document.getElementById('results');
+    const yearSpan = document.getElementById('yearSpan');
+    yearSpan.textContent = new Date().getFullYear();
+
+    let unitIdCounter = 0;
+
+    // THEME TOGGLE
+    (function initTheme() {
+      const root = document.documentElement;
+      const themeToggle = document.getElementById('themeToggle');
+      const saved = localStorage.getItem('theme') || 'light';
+      root.setAttribute('data-bs-theme', saved);
+      updateThemeButton(saved);
+
+      themeToggle.addEventListener('click', () => {
+        const current = root.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light';
+        const next = current === 'light' ? 'dark' : 'light';
+        root.setAttribute('data-bs-theme', next);
+        localStorage.setItem('theme', next);
+        updateThemeButton(next);
+      });
+
+      function updateThemeButton(mode) {
+        if (mode === 'dark') {
+          themeToggle.textContent = '☀️ Light';
+        } else {
+          themeToggle.textContent = '🌙 Dark';
+        }
+      }
+    })();
+
+    // CREATE A NEW UNIT CARD
+    function addUnitCard() {
+      const id = unitIdCounter++;
+      const unitId = `unit-${id}`;
+      const bodyId = `unitBody-${id}`;
+
+      const card = document.createElement('div');
+      card.className = 'card unit-card';
+      card.innerHTML = `
+        <div class="card-header d-flex justify-content-between align-items-center unit-header">
+          <div class="d-flex align-items-center gap-2">
+            <span class="drag-handle">⠿</span>
+            <button class="btn btn-link p-0 text-decoration-none" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#${bodyId}" aria-expanded="true">
+              <strong>Unit</strong>
+            </button>
+          </div>
+          <button class="btn btn-sm btn-outline-danger remove-unit">Remove</button>
+        </div>
+        <div id="${bodyId}" class="collapse show">
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label">Title</label>
+                <input type="text" class="form-control unit-title" placeholder="e.g. Kitchen Frame">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Stock Length (m)</label>
+                <input type="number" step="0.01" class="form-control unit-stock" placeholder="e.g. 4.8">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Price per Stock Unit (£)</label>
+                <input type="number" step="0.01" class="form-control unit-price" placeholder="e.g. 7.50">
+              </div>
+            </div>
+            <div class="row g-3 mt-2">
+              <div class="col-12">
+                <label class="form-label">Lengths (comma separated, m)</label>
+                <input type="text" class="form-control unit-lengths" placeholder="e.g. 1.2, 3, 3, 2.4">
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      unitsContainer.appendChild(card);
+
+      card.querySelector('.remove-unit').addEventListener('click', () => card.remove());
+    }
+
+    document.getElementById('addUnitBtn').addEventListener('click', addUnitCard);
+
+    // Initialise with one unit
+    addUnitCard();
+
+    // DRAG-TO-REORDER
+    new Sortable(unitsContainer, {
+      handle: '.drag-handle',
+      animation: 150
+    });
+
+    // BEST FIT DECREASING (BFD) CUT OPTIMISATION
+    function bestFitDecreasing(lengths, stock) {
+      // Sort lengths descending
+      const sorted = [...lengths].sort((a, b) => b - a);
+      const bins = []; // each bin: array of piece lengths
+
+      for (const piece of sorted) {
+        let bestIndex = -1;
+        let bestSpaceLeft = Infinity;
+
+        for (let i = 0; i < bins.length; i++) {
+          const used = bins[i].reduce((a, b) => a + b, 0);
+          const remaining = stock - used;
+          if (remaining >= piece && (remaining - piece) < bestSpaceLeft) {
+            bestIndex = i;
+            bestSpaceLeft = remaining - piece;
+          }
+        }
+
+        if (bestIndex === -1) {
+          // Open a new stock
+          bins.push([piece]);
+        } else {
+          bins[bestIndex].push(piece);
+        }
+      }
+
+      return bins;
+    }
+
+    function sum(arr) {
+      return arr.reduce((a, b) => a + b, 0);
+    }
+
+    // CALCULATE
+    document.getElementById('calculateBtn').addEventListener('click', () => {
+      const companyName = document.getElementById('companyName').value.trim() || 'Your Company';
+      const clientName  = document.getElementById('clientName').value.trim()  || 'Client';
+      const projectName = document.getElementById('projectName').value.trim() || 'Project';
+      const logoUrl     = document.getElementById('logoUrl').value.trim();
+      const extraPercent = parseFloat(document.getElementById('extraPercent').value || 0);
+      const notes = document.getElementById('notes').value.trim();
+
+      const summary = [];
+
+      document.querySelectorAll('.unit-card').forEach(card => {
+        const title = card.querySelector('.unit-title').value.trim() || 'Untitled';
+        const stockLength = parseFloat(card.querySelector('.unit-stock').value);
+        const pricePerUnit = parseFloat(card.querySelector('.unit-price').value || 0);
+        const lengthsRaw = card.querySelector('.unit-lengths').value;
+
+        const lengths = lengthsRaw.split(',')
+          .map(x => parseFloat(x))
+          .filter(x => !isNaN(x) && x > 0);
+
+        if (!stockLength || stockLength <= 0 || lengths.length === 0) return;
+
+        const cuts = bestFitDecreasing(lengths, stockLength);
+        const baseCount = cuts.length;
+        const requiredCount = Math.ceil(baseCount * (1 + extraPercent / 100));
+
+        const totalWaste = cuts.reduce((w, bin) => w + (stockLength - sum(bin)), 0);
+        const cost = pricePerUnit > 0 ? requiredCount * pricePerUnit : null;
+
+        summary.push({
+          title,
+          stockLength,
+          pricePerUnit,
+          cuts,
+          baseCount,
+          requiredCount,
+          totalWaste,
+          cost
+        });
+      });
+
+      if (summary.length === 0) {
+        resultsDiv.innerHTML = `<div class="alert alert-warning">Please add at least one unit with valid stock length and cut list.</div>`;
+        return;
+      }
+
+      const today = new Date();
+      const dateStr = today.toLocaleDateString();
+
+      let totalUnits = 0;
+      let totalWaste = 0;
+      let totalCost = 0;
+
+      summary.forEach(s => {
+        totalUnits += s.requiredCount;
+        totalWaste += s.totalWaste;
+        if (s.cost !== null) totalCost += s.cost;
+      });
+
+      // BUILD PURCHASE ORDER HTML
+      let html = '';
+
+      // Header
+      html += `
+        <div class="card p-4">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="d-flex align-items-center gap-3">
+              ${logoUrl
+                ? `<img src="${logoUrl}" alt="Logo" style="max-height:60px; max-width:160px;">`
+                : `<div class="border rounded px-3 py-2 text-muted small">Your Logo</div>`}
+              <div>
+                <h2 class="h4 mb-0">${companyName}</h2>
+                <div class="small text-muted">Purchase Order for: <strong>${clientName}</strong></div>
+                <div class="small text-muted">Project: <strong>${projectName}</strong></div>
+              </div>
+            </div>
+            <div class="text-end small text-muted">
+              <div><strong>Date:</strong> ${dateStr}</div>
+              <div><strong>Extra Margin:</strong> ${extraPercent.toFixed(1)}%</div>
+            </div>
+          </div>
+      `;
+
+      // Summary table
+      html += `
+        <h3 class="h5 mt-2">Timber Summary</h3>
+        <div class="table-responsive">
+          <table class="table table-bordered table-sm align-middle mt-2">
+            <thead class="table-light">
+              <tr>
+                <th>Title</th>
+                <th>Stock Length (m)</th>
+                <th>Price per Unit (£)</th>
+                <th>Quantity (Units)</th>
+                <th>Estimated Waste (m)</th>
+                <th>Cost (£)</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      summary.forEach(s => {
+        html += `
+          <tr>
+            <td>${s.title}</td>
+            <td>${s.stockLength.toFixed(2)}</td>
+            <td>${s.pricePerUnit > 0 ? s.pricePerUnit.toFixed(2) : '-'}</td>
+            <td>${s.requiredCount}</td>
+            <td>${s.totalWaste.toFixed(2)}</td>
+            <td>${s.cost !== null ? s.cost.toFixed(2) : '-'}</td>
+          </tr>
+        `;
+      });
+
+      html += `
+            </tbody>
+            <tfoot class="table-light">
+              <tr>
+                <th colspan="3">Totals</th>
+                <th>${totalUnits}</th>
+                <th>${totalWaste.toFixed(2)}</th>
+                <th>${totalCost > 0 ? totalCost.toFixed(2) : '-'}</th>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      `;
+
+      // Notes / instructions
+      html += `
+        <div class="mt-3">
+          <h3 class="h6">Notes / Delivery Instructions</h3>
+          <div class="border rounded p-2" style="min-height:60px; white-space:pre-wrap;">${notes || ''}</div>
+        </div>
+      `;
+
+      // Detailed layouts with cut diagrams
+      html += `<hr class="my-4"><h3 class="h5">Cut Layout Details</h3>`;
+
+      summary.forEach((s, idx) => {
+        html += `
+          <div class="mt-3">
+            <h4 class="h6 mb-1">${idx + 1}. ${s.title}</h4>
+            <div class="small text-muted">Stock length: ${s.stockLength.toFixed(2)} m &nbsp; | &nbsp;
+              Base units (before extra): ${s.baseCount} &nbsp; | &nbsp;
+              Ordered units (with extra): ${s.requiredCount}
+            </div>
+        `;
+
+        s.cuts.forEach((bin, i) => {
+          const used = sum(bin);
+          const waste = s.stockLength - used;
+          const usedPercent = (used / s.stockLength) * 100;
+          const wastePercent = Math.max(0, (waste / s.stockLength) * 100);
+
+          html += `<div class="mt-2 small"><strong>Stock #${i + 1}</strong> &mdash; Used: ${used.toFixed(2)} m, Waste: ${waste.toFixed(2)} m</div>`;
+          html += `<div class="cut-bar">`;
+
+          bin.forEach(piece => {
+            const width = Math.max(0.5, (piece / s.stockLength) * 100);
+            html += `
+              <div class="cut-segment" style="flex: 0 0 ${width}%;">
+                ${piece.toFixed(2)}m
+              </div>
+            `;
+          });
+
+          if (waste > 0.0001) {
+            html += `
+              <div class="waste-segment" style="flex: 0 0 ${wastePercent}%;">
+                waste
+              </div>
+            `;
+          }
+
+          html += `</div>`;
+        });
+
+        html += `</div>`;
+      });
+
+      html += `</div>`; // close main card
+
+      resultsDiv.innerHTML = html;
+    });
+
+    // PRINT
+    document.getElementById('printSummary').addEventListener('click', () => {
+      if (!resultsDiv.innerHTML.trim()) {
+        alert('Please calculate results before printing.');
+        return;
+      }
+      window.print();
+    });
+    
+    
+    // --- ADS SETUP ---
+const ads = [
+  { id: 'adTop',   img: 'ads/ad_top.jpg' },
+  { id: 'adBottom', img: 'ads/ad_bottom.jpg' }
+];
+
+// Stub for server tracking
+function track_ad_click(adId) {
+  // Placeholder for server call, e.g.:
+  // fetch(`/track_ad_click?id=${encodeURIComponent(adId)}`);
+  console.log(`Ad click tracked for: ${adId}`);
+}
+
+function ad_clicked(adId, link) {
+  track_ad_click(adId);
+  if (link) window.open(link, '_blank');
+}
+
+function initAds() {
+  ads.forEach(({ id, img }) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    const link = el.getAttribute('ad-link');
+    const adId = el.getAttribute('ad-id');
+
+    const image = document.createElement('img');
+    image.src = img;
+    image.alt = 'Advertisement';
+    image.style.maxWidth = '100%';
+    image.style.height = 'auto';
+    image.style.cursor = 'pointer';
+
+    image.addEventListener('click', () => ad_clicked(adId, link));
+
+    el.innerHTML = '';
+    el.appendChild(image);
+  });
+}
+
+window.addEventListener('DOMContentLoaded', initAds);
+  </script>
+</body>
+</html>
+
